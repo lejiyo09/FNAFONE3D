@@ -252,7 +252,7 @@ class World {
       if (!m) return;
       const wrap = new T.Object3D(); wrap.name = '__fbx'; wrap.scale.set(-0.01, 0.01, 0.01); wrap.add(m);
       objsOut[base + i].add(wrap); objsOut[base + i].userData.fbx = m; objsOut[base + i].userData.charSrc = src;
-      if (n.n.startsWith('hand')) { wrap.scale.multiplyScalar(0.13); if (n.n === 'hand') objsOut[base + i].visible = false; else objsOut[base + i].position.add(new T.Vector3(G.HAND_DX || 0.086, G.HAND_DY || -0.2, G.HAND_DZ || 0.32)); }   // empirical: both hands come from 'hand (1)'   // empirical: the first-person hands come out 4x too large with the plain conversion
+      if (n.n.startsWith('hand')) { wrap.scale.multiplyScalar(0.13); objsOut[base + i].visible = !!G.SHOW_HANDS; if (n.n === 'hand') objsOut[base + i].visible = false; else objsOut[base + i].position.add(new T.Vector3(G.HAND_DX || 0.086, G.HAND_DY || -0.2, G.HAND_DZ || 0.32)); }   // empirical: both hands come from 'hand (1)'   // empirical: the first-person hands come out 4x too large with the plain conversion
       // materials of the YAML SkinnedMeshRenderers (matched to the FBX meshes by name)
       const idx = new Map(); m.traverse((o) => { if (o.isMesh || o.isSkinnedMesh) idx.set(norm(o.name), o); });
       const walk = (k) => {

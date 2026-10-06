@@ -214,8 +214,8 @@ const pool = { points: [], spots: [], items: [], frame: 0 };
 let flashSpot = null;
 function setupLights() {
   const scene = world.scene;
-  scene.add(new T.AmbientLight(0x4a5266, 0.9));
-  scene.add(new T.HemisphereLight(0x7080a0, 0x201810, 0.35));
+  scene.add(new T.AmbientLight(0x5a6580, 1.5));
+  scene.add(new T.HemisphereLight(0x8090b0, 0x302418, 0.6));
   for (let i = 0; i < 12; i++) { const l = new T.PointLight(0xffffff, 0, 10, 1.6); l.visible = false; scene.add(l); pool.points.push(l); }
   for (let i = 0; i < 4; i++) { const l = new T.SpotLight(0xffffff, 0, 30, 0.6, 0.4, 1.4); l.visible = false; scene.add(l); scene.add(l.target); pool.spots.push(l); }
   flashSpot = new T.SpotLight(0xfff0cc, 6, 120, 0.42, 0.45, 1.0);
