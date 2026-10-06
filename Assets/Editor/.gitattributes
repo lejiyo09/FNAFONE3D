@@ -1,0 +1,2 @@
+# keep the editor tool as a normal text file (the repo-wide rule stores *.cs in Git LFS)
+*.cs -filter -diff -merge text
