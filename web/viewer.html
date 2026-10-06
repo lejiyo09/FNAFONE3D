@@ -1,0 +1,33 @@
+<!doctype html><meta charset="utf-8"><title>Scene viewer</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{width:100%;height:100%;display:block}#i{position:fixed;left:8px;top:8px;color:#0f0;font:12px monospace;white-space:pre}</style>
+<canvas id="c"></canvas><div id="i"></div>
+<script src="lib/three.min.js"></script><script src="lib/fflate.min.js"></script><script src="lib/NURBSUtils.js"></script><script src="lib/NURBSCurve.js"></script>
+<script src="lib/FBXLoader.js"></script><script src="lib/OBJLoader.js"></script><script src="lib/SkeletonUtils.js"></script>
+<script src="js/world.js"></script>
+<script>
+(async()=>{
+ const q=new URLSearchParams(location.search);
+ const [data,assets,anims,matlib]=await Promise.all(['game','assets','anims','matlib'].map(n=>fetch('data/'+n+'.json').then(r=>r.json())));
+ const w=new World(data,assets,anims,matlib);
+ const need=new Set(data.models); for(const p of Object.values(data.prefabs||{}))(p.models||[]).forEach(m=>need.add(m));
+ const t0=performance.now();
+ await w.loadModels([...need],(d,n)=>{document.getElementById('i').textContent='models '+d+'/'+n});
+ w.build();
+ const r=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true});r.setSize(innerWidth,innerHeight,false);
+ w.scene.add(new THREE.AmbientLight(0xffffff,1.3)); w.scene.background=new THREE.Color(0x202530);
+ const cam=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.1,600);
+ const pos=(q.get('pos')||'3,8,-25').split(',').map(Number), look=(q.get('look')||'-40,2,0').split(',').map(Number);
+ // unity->three: mirror x
+ cam.position.set(-pos[0],pos[1],pos[2]); cam.lookAt(-look[0],look[1],look[2]);
+
+ const bb=new THREE.Box3().setFromObject(w.mirror); const c=bb.getCenter(new THREE.Vector3()), sz=bb.getSize(new THREE.Vector3());
+ if(q.get('top')){const H=+q.get('top')>1?+q.get('top'):120;cam.position.set(c.x,H,c.z+0.01);cam.lookAt(c.x,0,c.z);cam.near=H-(+q.get('cut')||8);cam.far=H+20;cam.fov=+q.get('fov')||60;cam.updateProjectionMatrix();}
+ if(q.get('only')){const k=q.get('only').split(',');for(const o of w.mirror.children)if(!k.some(h=>o.name.toLowerCase().includes(h)))o.visible=false}
+ if(q.get('hide')){for(const o of w.objs){const n=o.name.toLowerCase();if(q.get('hide').split(',').some(h=>n.includes(h)))o.visible=false}}
+ window.__bb=[bb.min.toArray().map(v=>+v.toFixed(0)),bb.max.toArray().map(v=>+v.toFixed(0))];
+ window.__w=w; window.__cam=cam; window.__r=r;
+ r.render(w.scene,cam);
+ document.getElementById('i').textContent=JSON.stringify(window.__bb)+JSON.stringify(w.stats)+' load '+((performance.now()-t0)/1000).toFixed(1)+'s nodes '+w.objs.length;
+ window.__ready=true;
+})();
+</script>

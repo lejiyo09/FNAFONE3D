@@ -3,66 +3,108 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FNAFONE3D Web</title>
+<title>FNAFONE 3D</title>
 <style>
-  :root{--fg:#e8e2d0;--bad:#c0392b}
-  html,body{margin:0;height:100%;background:#000;color:var(--fg);font-family:"Courier New",monospace;overflow:hidden}
-  canvas{display:block;width:100%;height:100%}
+  @font-face{font-family:PublicPixel;src:url(assets/fonts/publicpixel-0w5kv.ttf)}
+  @font-face{font-family:Anak;src:url(assets/fonts/anakcute-513pv.ttf)}
+  :root{--fg:#f1ecd8;--bad:#c0392b}
+  html,body{margin:0;height:100%;background:#000;color:var(--fg);font-family:PublicPixel,monospace;overflow:hidden;user-select:none}
+  canvas#c{display:block;width:100%;height:100%}
   .layer{position:fixed;inset:0;pointer-events:none}
-  #hud{display:none}
-  #clock{position:absolute;top:14px;right:20px;font-size:28px;text-shadow:0 0 6px #000}
-  #bat{position:absolute;top:14px;left:20px;display:flex;gap:4px;align-items:center;font-size:14px}
-  #bat i{width:14px;height:22px;background:#3a3a3a;border:1px solid #888}
-  #bat i.on{background:#7ee36a}
-  #tip{position:absolute;bottom:26px;width:100%;text-align:center;font-size:16px;text-shadow:0 0 6px #000}
-  #note{position:absolute;top:60px;width:100%;text-align:center;font-size:18px;opacity:0;transition:opacity .4s}
-  #cross{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:rgba(255,255,255,.55)}
-  #cam{display:none}
-  #cam .bar{position:absolute;bottom:18px;width:100%;text-align:center;font-size:18px;text-shadow:0 0 6px #000}
-  #cam .rec{position:absolute;top:16px;left:20px;color:#e33;font-size:22px}
-  #noise{position:absolute;inset:0;opacity:.14;mix-blend-mode:screen}
-  .screen{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;text-align:center;background:rgba(0,0,0,.82);z-index:5;overflow:auto;padding:16px 0;box-sizing:border-box}
+  img.px{image-rendering:pixelated}
+  .screen{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;text-align:center;z-index:20;overflow:auto;padding:16px 0;box-sizing:border-box}
   .screen>:first-child{margin-top:auto}.screen>:last-child{margin-bottom:auto}
-  .screen h1{font-size:clamp(26px,6vw,44px);margin:0 0 14px;letter-spacing:2px}
-  .screen p{max-width:640px;line-height:1.6;margin:6px 20px}
-  button{font:inherit;font-size:20px;padding:10px 28px;margin-top:18px;background:#222;color:var(--fg);border:2px solid var(--fg);cursor:pointer}
+  #loading{display:flex;background:#000}
+  #loading .bar{width:min(420px,70vw);height:14px;border:2px solid var(--fg);margin-top:18px}
+  #loading .bar i{display:block;height:100%;width:0;background:var(--fg)}
+  #menu{background:radial-gradient(ellipse at 50% 40%,#2a1a14,#050303 75%)}
+  #menu h1{font-size:clamp(26px,6vw,56px);margin:0 0 30px;letter-spacing:3px;text-shadow:4px 4px 0 #000,0 0 28px #b5651d}
+  button{font:inherit;font-size:clamp(14px,2.4vw,22px);padding:12px 34px;margin:8px;min-width:260px;background:#000 center/100% 100% no-repeat;color:var(--fg);border:2px solid var(--fg);cursor:pointer}
   button:hover{background:var(--fg);color:#000}
-  #dead h1{color:var(--bad)}
-  #flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none}
-  small{opacity:.6}
+  .small{font-size:11px;opacity:.65;max-width:620px;line-height:1.7;margin:6px 16px}
+  #contact{background:rgba(0,0,0,.92)}
+  #contact p{max-width:640px;line-height:1.8;font-size:13px;margin:6px 18px}
+  /* HUD */
+  #hud{display:none}
+  #bat{position:absolute;top:16px;left:16px;width:96px;height:44px;background:none center/100% 100% no-repeat;image-rendering:pixelated}
+  #bat i{position:absolute;top:7px;bottom:7px;width:15px;background:none center/100% 100% no-repeat;image-rendering:pixelated}
+  #clock{position:absolute;top:14px;right:22px;font-size:clamp(18px,3vw,30px);text-shadow:3px 3px 0 #000}
+  #cross{position:absolute;left:50%;top:50%;width:28px;height:28px;margin:-14px;background:none center/contain no-repeat;opacity:.8;image-rendering:pixelated}
+  #inv{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:14px}
+  .slot{width:92px;height:92px;background:none center/100% 100% no-repeat;image-rendering:pixelated;position:relative}
+  .slot.sel{background-image:none}
+  .slot img{position:absolute;inset:14px;width:calc(100% - 28px);height:calc(100% - 28px);object-fit:contain;image-rendering:pixelated}
+  .slot b{position:absolute;bottom:-18px;width:100%;text-align:center;font-size:9px;font-weight:normal;text-shadow:2px 2px 0 #000;white-space:nowrap}
+  .slot u{position:absolute;top:2px;left:5px;font-size:9px;text-decoration:none;opacity:.7}
+  #prog{position:absolute;left:50%;top:58%;width:200px;height:12px;margin-left:-100px;border:2px solid var(--fg);display:none;background:rgba(0,0,0,.5)}
+  #prog i{display:block;height:100%;width:0;background:#7ee36a}
+  #tip{position:absolute;bottom:130px;width:100%;text-align:center;font-size:12px;text-shadow:2px 2px 0 #000}
+  #notif{position:absolute;top:70px;left:50%;transform:translate(-50%,-400%);opacity:0;min-width:300px;max-width:80vw;padding:10px 18px;background:rgba(0,0,0,.78);border:2px solid var(--fg);transition:transform .35s}
+  #notif.show{transform:translate(-50%,0);opacity:1}
+  #notif b{display:block;font-size:13px;margin-bottom:6px;color:#ffd24a}
+  #notif span{font-size:10px;line-height:1.6}
+  /* security camera tablet */
+  #cam{display:none;background:#000}
+  #cam canvas{position:absolute;inset:0;width:100%;height:100%;opacity:.16;mix-blend-mode:screen}
+  #cam .frame{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;opacity:.9}
+  #cam .rec{position:absolute;top:22px;left:30px;font-size:22px;color:#ff3b30;display:flex;gap:10px;align-items:center}
+  #cam .rec img{width:28px;height:28px;image-rendering:pixelated;animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:0}}
+  #camname{position:absolute;top:22px;right:80px;font-size:20px;text-shadow:2px 2px 0 #000}
+  #cambtns{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);display:flex;gap:10px;pointer-events:auto}
+  #cambtns button{min-width:0;padding:8px 14px;font-size:14px;margin:0;background-color:rgba(0,0,0,.65)}
+  #cambtns button.on{background-color:#f1ecd8;color:#000}
+  #camclose{position:absolute;top:14px;right:20px;pointer-events:auto;min-width:0;padding:6px 14px;margin:0}
+  #dead{background:#000 center/cover no-repeat}
+  #dead h1{font-size:clamp(28px,7vw,64px);color:var(--bad);text-shadow:0 0 20px #700}
+  #win{background:#000}
+  #win h1{font-size:clamp(34px,9vw,90px)}
+  #flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:15}
+  #pause{background:rgba(0,0,0,.7)}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="flash"></div>
 
 <div id="hud" class="layer">
-  <div id="bat"><span>FLASHLIGHT</span></div>
+  <div id="bat"></div>
   <div id="clock">12 AM</div>
   <div id="cross"></div>
-  <div id="note"></div>
+  <div id="notif"><b></b><span></span></div>
+  <div id="prog"><i></i></div>
   <div id="tip"></div>
+  <div id="inv"><div class="slot sel" id="s0"><u>1</u><img><b>Blank</b></div><div class="slot" id="s1"><u>2</u><img><b>Blank</b></div></div>
 </div>
 <div id="cam" class="layer">
   <canvas id="noise"></canvas>
-  <div class="rec">● REC <span id="camname"></span></div>
-  <div class="bar">1–4: 카메라 전환 &nbsp; Tab: 닫기</div>
+  <img class="frame" id="camframe">
+  <div class="rec"><img id="recimg"><span>REC</span></div>
+  <div id="camname"></div>
+  <div id="cambtns"></div>
+  <button id="camclose">X</button>
 </div>
-<div id="flash"></div>
 
-<div id="menu" class="screen" style="display:flex">
-  <h1>FNAFONE3D&nbsp;WEB</h1>
-  <p>오픈소스 Unity 프로젝트 <b>FNAFONE3D</b>의 게임 규칙을 브라우저(three.js)로 옮긴 팬 이식판입니다.<br>
-  밤 12시부터 6시까지(실시간 약 3분) 살아남으세요. 시계가 1시·2시·3시·4시가 되면 보니·치카·프레디·엔도스켈레톤이 깨어나 추격합니다.</p>
-  <p>손전등 빛이 닿는 동안 적은 멈춥니다. 배터리는 40초뿐이니 배터리 팩을 모으세요.<br>
-  약한 문은 적도 열 수 있고, 강한 문(사무실 문)은 플레이어만 열 수 있습니다.</p>
-  <p><small>WASD 이동 · Shift 달리기(2배) · 마우스 시점 · F 손전등 · E 상호작용(문/배터리) · Tab 보안 카메라 태블릿(1–4)</small></p>
-  <button id="start">시작</button>
-  <p><small>원작 에셋 대신 프리미티브로 만든 코드 기반 모델을 사용합니다. 원 프로젝트: CC BY 라이선스, 변경됨(Unity → HTML/three.js).</small></p>
+<div id="loading" class="screen" style="display:flex"><div>FNAFONE 3D</div><div class="bar"><i id="lbar"></i></div><div class="small" id="lmsg">loading…</div></div>
+<div id="menu" class="screen">
+  <h1>FNAFONE 3D</h1>
+  <button id="play">Play</button><button id="contactBtn">Contact</button>
+  <div class="small">Unity 프로젝트 FNAFONE3D(lejiyo09/FNAFONE3D)의 씬·메시·애니메이션·사운드·스크립트 규칙을 그대로 변환한 웹 이식판 (three.js).<br>
+  WASD 이동 · Shift 달리기 · 마우스 시점 · 좌클릭 상호작용(길게=줍기) · 우클릭 손전등 · 1/2 슬롯 · Q 버리기 · Esc 메뉴</div>
 </div>
-<div id="dead" class="screen"><h1>YOU DIED</h1><p id="deadby"></p><button id="retry">다시 시작 (R)</button></div>
-<div id="win" class="screen"><h1>6 AM</h1><p>밤을 버텼습니다!</p><button id="again">다시 하기</button></div>
+<div id="contact" class="screen">
+  <h1>Contact</h1>
+  <p>FNAFONE 3D — open source Unity fan game, CC BY.<br>Original repository: github.com/lejiyo09/FNAFONE3D</p>
+  <p>This page is a web port (Unity → HTML/three.js). The original work was modified.</p>
+  <button id="contactClose">Close</button>
+</div>
+<div id="pause" class="screen"><h1>Paused</h1><button id="resume">Play</button><button id="pcontact">Contact</button><button id="pexit">Exit</button></div>
+<div id="dead" class="screen"><h1>YOU DIED</h1><p class="small" id="deadby"></p><div class="small">메인 메뉴로 돌아갑니다…</div></div>
+<div id="win" class="screen"><h1>6 AM</h1><p class="small">You survived the night.</p></div>
 
-<script src="three.min.js"></script>
-<script src="game.js"></script>
+<script src="lib/three.min.js"></script><script src="lib/fflate.min.js"></script><script src="lib/NURBSUtils.js"></script><script src="lib/NURBSCurve.js"></script>
+<script src="lib/FBXLoader.js"></script><script src="lib/OBJLoader.js"></script><script src="lib/SkeletonUtils.js"></script>
+<script src="js/world.js"></script><script src="js/phys.js"></script><script src="js/anim.js"></script><script src="js/audio.js"></script>
+<script src="js/game.js"></script>
 </body>
 </html>
