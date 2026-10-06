@@ -138,7 +138,7 @@ class Phys {
   raycast(origin, dir, maxDist, opts = {}) {
     let best = null, bt = maxDist;
     for (const c of this.colliders) {
-      if (!c.enabled || (c.trig && !opts.trig)) continue;
+      if (!c.enabled || c.noRay || (c.trig && !opts.trig)) continue;
       if (opts.ignore && opts.ignore(c)) continue;
       if (!c.obj.visible && !opts.hidden) continue;
       let vis = true; for (let p = c.obj; p; p = p.parent) if (p.visible === false) { vis = false; break; }
@@ -171,5 +171,6 @@ class Phys {
   }
 }
 
+Phys.Collider = Collider;
 G.Phys = Phys; G.uMatrix = uMatrix; G.uPos = uPos; G.uDir = uDir; G.MIRROR = MIRROR;
 })(window);

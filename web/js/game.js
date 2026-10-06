@@ -5,6 +5,7 @@ const T = THREE;
 const $ = (id) => document.getElementById(id);
 const DEG = Math.PI / 180;
 const { Animator, ClipPlayer, resolvePath } = Anim;
+const Collider = Phys.Collider;
 
 const S = { mode: 'loading', paused: false, clock: 0, hour: 0, win: false, dead: false, lockPlayer: false, camX: 0, yaw: 0,
             tablet: false, camIdx: 0, jump: null, t: 0 };
@@ -71,7 +72,7 @@ async function boot() {
   $('loading').style.display = 'none'; $('menu').style.display = 'flex';
   S.mode = 'menu';
   requestAnimationFrame(loop);
-  window.__game = { S, world, phys, behs, enemies, startGame, get player() { return player; } };
+  window.__game = { S, world, mouse, keys, uP, forwardOf, behOf, phys, behs, enemies, startGame, tick, PERF, get player() { return player; }, get nav() { return nav; }, get info() { return renderer.info; }, get flash() { return flashB; }, get inv() { return inventoryB; }, get clock() { return clockB; } };
   window.__ready = true;
 }
 
@@ -82,6 +83,8 @@ function injectStyles() {
   #cross{background-image:${u('player_crosshair.png')}}.slot{background-image:${u('itemhold.png')}}.slot.sel{background-image:${u('itemhold_chosen.png')}}
   #dead{background-image:${u('DeadScreen.jpg')}}#cambtns button{background-image:${u('camera_button.png')}}`;
   document.head.appendChild(st);
+  $('mpanel').style.backgroundImage = 'url(' + spriteUrl('Assets/Sprites/menu.png') + ')';
+  document.documentElement.style.setProperty('--mbtn', 'url(' + spriteUrl('Assets/Sprites/menubutton.png') + ')');
   $('camframe').src = spriteUrl('Assets/Sprites/scamera_frame.png');
   $('recimg').src = spriteUrl('Assets/Sprites/rec.png');
 }
@@ -96,6 +99,7 @@ function setupObjects() {
   const objs = world.objs;
   player = objs.find((o) => o.userData.tag === 'Player');
   phys.build(objs);
+  { const col = phys.collidersOf(player)[0]; groundY = col ? col.min.y : uP(player).y - 3.8; }   // ground level from the player's capsule
 
   // animators
   for (const o of objs) {
@@ -107,13 +111,24 @@ function setupObjects() {
     }
   }
 
+  // Restaurant FBX nodes: animators for nodes whose Unity Animator component could not be resolved (hashed fileIDs),
+  // and static colliders fitted to the meshes (Unity added Box/Mesh colliders to many of them).
+  const rest = objs.find((o) => o.userData.node.c.fbx && o.userData.node.c.fbx.endsWith('restaurant.fbx'));
+  if (rest) {
+    const alnum = (x) => String(x).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const nodeBy = new Map(); rest.userData.fbx.traverse((o) => { if (o.name) nodeBy.set(alnum(o.name), o); });
+    const link = { 'Assets/Animations/Cube_149.controller': 'cube149', 'Assets/Animations/Cube_150.controller': 'cube150', 'Assets/Animations/fan_security_room.controller': 'propeller' };
+    for (const [ctrl, nm] of Object.entries(link)) {
+      const o = nodeBy.get(nm); if (!o) continue;
+      const an = new Animator(world, o, ctrl); an.mode = 'auto'; o.userData.animator = an; animators.push(an);
+      const d = an.layer.default; if (d && an.layer.states[d] && an.layer.states[d].motion) an.play(d);
+    }
+    addRestaurantColliders(rest, objs);
+  }
   // behaviours
   for (const o of objs) for (const mb of o.userData.node.c.mb || []) createBehaviour(o, mb);
   for (const b of behs) b.start && b.start();
 
-  // ground level from the player's capsule
-  const col = phys.collidersOf(player)[0];
-  groundY = col ? col.min.y : uP(player).y - 3.8;
 
   for (const c of phys.colliders) {
     for (let p = c.obj; p; p = p.parent) if (p.userData.animator || p.userData.node && p.userData.node.c.mb && p.userData.node.c.mb.some((m) => m.script === 'EnemyAI' || m.script === 'PlayerController')) { c.dynamic = true; break; }
@@ -121,6 +136,42 @@ function setupObjects() {
   }
   setupLights();
   setupLevelExtras();
+  // static batching (draw-call reduction): everything not referenced/animated/tagged by the game's scripts
+  const refd = new Set();
+  const collect = (o, v) => { if (v && typeof v === 'object') { if (v['@'] !== undefined) { const t = o.userData.scope[v['@']]; if (t) refd.add(t); } else for (const k in v) collect(o, v[k]); } };
+  for (const b of behs) for (const k in b.f) collect(b.obj, b.f[k]);
+  const res = batchStatic(world.mirror, (o) => {
+    if (refd.has(o) || o.userData.animator || o.userData.beh || o.userData.lightDesc) return true;
+    const n = o.userData.node; if (!n) return false;
+    return n.tag !== 'Untagged' || !!n.c.rb || !!n.c.anim || !!n.c.camera || (n.c.mb && n.c.mb.length > 0) || n.c.audio && n.c.audio.play;
+  });
+  console.log('batched', JSON.stringify(res));
+}
+
+function addRestaurantColliders(rest, objs) {
+  const alnum = (x) => String(x).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const claimed = new Set();    // parts that the scene replaced by their own GameObjects (doors etc.)
+  for (const o of objs) { const c = o.userData.node.c; if (c.mesh && c.mesh.src && c.mesh.src.endsWith('restaurant.fbx')) claimed.add(alnum(o.name.replace(/\s*\(\d+\)$/, ''))); }
+  const SKIP = /^(poster|cobweb|light|blood|hanging|bezier|grid|shit|mirror|torus|speaker|winframe|door|propeller|motor)/;
+  const tmpBox = new T.Box3(), sz = new T.Vector3(), ctr = new T.Vector3();
+  let n = 0;
+  rest.userData.fbx.traverse((o) => {
+    if (!o.isMesh) return;
+    const nm = alnum(o.name);
+    if (SKIP.test(nm) || claimed.has(nm)) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    const bb = o.geometry.boundingBox; bb.getCenter(ctr); bb.getSize(sz).multiplyScalar(0.5);
+    const L = new T.Matrix4().compose(ctr.clone(), new T.Quaternion(), sz.clone());
+    const col = new Collider(o, 'auto', L, false);
+    // keep only things that stand in the walking band
+    if (!o.userData.animator) {
+      if (col.max.y < groundY + 0.9 || col.min.y > groundY + 7 || (col.max.y - col.min.y) < 0.4) return;
+      if (Math.max(col.max.x - col.min.x, col.max.z - col.min.z) < 0.25) return;
+    } else col.dynamic = true;
+    if (/^(table|tablecover|chair|desk|shelf|case|cupboard|cylinder)/.test(nm)) col.noRay = true;   // furniture that carries items: do not occlude interaction rays
+    phys.colliders.push(col); n++;
+  });
+  console.log('restaurant colliders', n);
 }
 
 // ---------- lights ----------
@@ -532,7 +583,7 @@ class PlayerController {
   }
   ray() {
     const o = uP(rotateOnX), d = forwardOf(rotateOnX);
-    return phys.raycast(o, d, this.f.interactDistance || 5, { ignore: (c) => isUnder(c.obj, this.obj) });
+    return phys.raycast(o, d, this.f.interactDistance || 5, { trig: true, ignore: (c) => isUnder(c.obj, this.obj) });
   }
   interact(dt) {
     const hit = this.ray(); const tag = hit ? hit.collider.tag : null; const ho = hit ? hit.collider.obj : null;
@@ -572,7 +623,7 @@ class PlayerController {
 }
 REG.PlayerController = PlayerController;
 const ITEM_TAGS = new Set(['pizza', 'partyHat', 'plasticPlate', 'plasticFork', 'drink', 'tape', 'doorKey', 'pickableBattery']);
-let G_SENS = 1;
+let G_SENS = 2;
 function setProg(v) { const p = $('prog'); if (v < 0) { p.style.display = 'none'; return; } p.style.display = 'block'; p.firstElementChild.style.width = Math.min(100, v) + '%'; }
 function tipFor(tag) {
   switch (tag) {
@@ -625,7 +676,12 @@ class EnemyAI {
         this.pathT -= dt;
         if (this.pathT <= 0) { this.path = nav.find(ep.x, ep.z, pp.x, pp.z); this.pathT = 0.35; }
         let tx = pp.x, tz = pp.z;
-        if (this.path && this.path.length > 1) { const n = this.path.find((q) => Math.hypot(q.x - ep.x, q.z - ep.z) > 1.2); if (n) { tx = n.x; tz = n.z; } }
+        if (this.path && this.path.length > 1) {
+          // string pulling: aim at the farthest of the next path nodes that is in a straight, unblocked line
+          let near = 0, nd = Infinity;
+          this.path.forEach((q, i) => { const d = Math.hypot(q.x - ep.x, q.z - ep.z); if (d < nd) { nd = d; near = i; } });
+          for (let i = Math.min(this.path.length - 1, near + 10); i > near; i--) { const q = this.path[i]; if (nav.lineClear(ep.x, ep.z, q.x, q.z)) { tx = q.x; tz = q.z; break; } if (i === near + 1) { tx = q.x; tz = q.z; } }
+        }
         const dx = tx - ep.x, dz = tz - ep.z, l = Math.hypot(dx, dz) || 1;
         const [nx, nz] = phys.move(ep.x, ep.z, this.radius, groundY + 0.8, groundY + 6.5, dx / l * this.speed * dt, dz / l * this.speed * dt, (c) => isUnder(c.obj, this.obj) || c.tag === 'Player' || ITEM_TAGS.has(c.tag) || (c.tag === 'weakDoor'));
         this.obj.position.x = nx; this.obj.position.z = nz;
@@ -735,6 +791,11 @@ class NavGrid {
       }
     }
   }
+  lineClear(x0, z0, x1, z1) {
+    const n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / (this.cell * 0.5));
+    for (let i = 1; i < n; i++) { const t = i / n, k = this.idx(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t); if (k < 0 || this.blocked[k]) return false; }
+    return true;
+  }
   idx(x, z) { const cx = Math.floor((x - this.x0) / this.cell), cz = Math.floor((z - this.z0) / this.cell); return (cx < 0 || cz < 0 || cx >= this.w || cz >= this.h) ? -1 : cz * this.w + cx; }
   pos(i) { return { x: this.x0 + ((i % this.w) + 0.5) * this.cell, z: this.z0 + (Math.floor(i / this.w) + 0.5) * this.cell }; }
   find(sx, sz, tx, tz) {
@@ -786,19 +847,27 @@ addEventListener('mousedown', (e) => {
 addEventListener('mouseup', (e) => { if (e.button === 0) mouse.l = false; if (e.button === 2) mouse.r = false; });
 addEventListener('contextmenu', (e) => e.preventDefault());
 $('camclose').onclick = () => tabletB && tabletB.close();
+document.addEventListener('pointerlockchange', () => {
+  if (S.mode === 'play' && document.pointerLockElement !== $('c') && !S.paused && !S.tablet && !S.dead && !S.win && !S.jump) togglePause();
+});
 function togglePause() {
   S.paused = !S.paused; $('pause').style.display = S.paused ? 'flex' : 'none';
   if (S.paused) document.exitPointerLock && document.exitPointerLock(); else lockPointer();
   audio.setPaused(S.paused);
 }
+$('sens').oninput = (e) => { G_SENS = +e.target.value; try { localStorage.setItem('fnaf3d_sens', G_SENS); } catch (err) {} };
+try { const v = parseFloat(localStorage.getItem('fnaf3d_sens')); if (v) { G_SENS = v; $('sens').value = v; } } catch (err) {}
 $('resume').onclick = () => togglePause(); $('pexit').onclick = () => backToMenu();
 $('pcontact').onclick = () => { $('contact').style.display = 'flex'; };
 $('contactBtn').onclick = () => { $('contact').style.display = 'flex'; };
 $('contactClose').onclick = () => { $('contact').style.display = 'none'; };
 $('play').onclick = () => startGame();
+$('exitBtn').onclick = () => { try { window.close(); } catch (e) {} $('exitBtn').textContent = 'Close the tab to exit'; };
+let menuMusic = null;
+addEventListener('pointerdown', () => { if (S.mode === 'menu' && !menuMusic && audio) { audio.unlock(); menuMusic = true; sfx('Assets/Sound Effects/main_menu_music.mp3', { loop: true, vol: 0.5 }).then((h) => { menuMusic = h; }); } }, { once: false });
 
 function startGame() {
-  audio.unlock();
+  audio.unlock(); if (menuMusic && menuMusic.stop) menuMusic.stop();
   $('menu').style.display = 'none'; $('hud').style.display = 'block';
   S.mode = 'play'; lockPointer();
   // bgnoises (EventSystem AudioSource, loop)
@@ -820,28 +889,35 @@ function drawNoise() { const img = nzc.createImageData(160, 90); for (let i = 0;
 
 // ---------- main loop ----------
 let last = performance.now(), fpsT = 0;
+function tick(dt) {
+  S.t += dt;
+  for (const b of behs) if (b.update) b.update(dt);
+  for (const a of animators) a.update(dt);
+  updateBodies(dt);
+  for (let i = jobs.length - 1; i >= 0; i--) { jobs[i].t -= dt; if (jobs[i].t <= 0) { const j = jobs.splice(i, 1)[0]; j.fn(); } }
+  if (inventoryB) inventoryB.update();
+  if (S.tablet) drawNoise();
+  world.mirror.updateMatrixWorld(true);
+  if (phys) for (const c of phys.colliders) if (c.dynamic) c.refresh();
+  if (S.navReady && (S.t * 2 | 0) !== S.navT) { S.navT = S.t * 2 | 0; nav.rebuild(); }
+}
+const PERF = { upd: 0, ren: 0, n: 0 };
 function loop(now) {
   requestAnimationFrame(loop);
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (S.mode === 'play' && !S.paused) {
-    S.t += dt;
-    for (const b of behs) if (b.update) b.update(dt);
-    for (const a of animators) a.update(dt);
-    updateBodies(dt);
-    for (let i = jobs.length - 1; i >= 0; i--) { jobs[i].t -= dt; if (jobs[i].t <= 0) { const j = jobs.splice(i, 1)[0]; j.fn(); } }
-    if (inventoryB) inventoryB.update();
-    if (S.tablet) drawNoise();
-    if (S.navReady && (S.t * 2 | 0) !== S.navT) { S.navT = S.t * 2 | 0; nav.rebuild(); }
-  }
-  world.mirror.updateMatrixWorld(true);
-  if (phys) for (const c of phys.colliders) if (c.dynamic) c.refresh();
+  const t0 = performance.now();
+  if (S.mode === 'play' && !S.paused) tick(dt);
+  else world.mirror.updateMatrixWorld(true);
   // active camera
-  let node = mainCam, fov = 60;
+  let node = mainCam;
   if (S.jump && S.jump.camObj) { node = S.jump.camObj; }
   else if (S.tablet && tabletB && tabletB.cams[S.camIdx]) node = tabletB.cams[S.camIdx];
   if (node) { const c = node.userData.node.c.camera; camFromNode(node, c ? c.fov : 60); }
   updateLights();
+  const t1 = performance.now();
   renderer.render(world.scene, camera);
+  const t2 = performance.now();
+  PERF.upd += t1 - t0; PERF.ren += t2 - t1; PERF.n++;
 }
 
 boot().catch((e) => { console.error(e); $('lmsg').textContent = 'error: ' + e.message; });

@@ -17,8 +17,12 @@
   #loading{display:flex;background:#000}
   #loading .bar{width:min(420px,70vw);height:14px;border:2px solid var(--fg);margin-top:18px}
   #loading .bar i{display:block;height:100%;width:0;background:var(--fg)}
-  #menu{background:radial-gradient(ellipse at 50% 40%,#2a1a14,#050303 75%)}
-  #menu h1{font-size:clamp(26px,6vw,56px);margin:0 0 30px;letter-spacing:3px;text-shadow:4px 4px 0 #000,0 0 28px #b5651d}
+  #menu{background:#0a0a0c}
+  #mpanel{width:min(402px,90vw);height:min(544px,80vh);background:center/100% 100% no-repeat;image-rendering:pixelated;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 24px;box-sizing:border-box}
+  #mpanel .small2{font-size:10px;opacity:.6;margin-top:18px}
+  #mpanel button{background-image:var(--mbtn);background-color:transparent;min-width:0;width:100%;margin:6px 0;border:none;image-rendering:pixelated}
+  #mpanel button{color:#111}#mpanel button:hover{background-color:rgba(255,200,80,.45);color:#000}
+  #menu h1{font-size:clamp(22px,4vw,34px);margin:0 0 26px;letter-spacing:2px;text-shadow:3px 3px 0 #000}
   button{font:inherit;font-size:clamp(14px,2.4vw,22px);padding:12px 34px;margin:8px;min-width:260px;background:#000 center/100% 100% no-repeat;color:var(--fg);border:2px solid var(--fg);cursor:pointer}
   button:hover{background:var(--fg);color:#000}
   .small{font-size:11px;opacity:.65;max-width:620px;line-height:1.7;margin:6px 16px}
@@ -44,7 +48,7 @@
   #notif b{display:block;font-size:13px;margin-bottom:6px;color:#ffd24a}
   #notif span{font-size:10px;line-height:1.6}
   /* security camera tablet */
-  #cam{display:none;background:#000}
+  #cam{display:none}
   #cam canvas{position:absolute;inset:0;width:100%;height:100%;opacity:.16;mix-blend-mode:screen}
   #cam .frame{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;opacity:.9}
   #cam .rec{position:absolute;top:22px;left:30px;font-size:22px;color:#ff3b30;display:flex;gap:10px;align-items:center}
@@ -87,10 +91,12 @@
 
 <div id="loading" class="screen" style="display:flex"><div>FNAFONE 3D</div><div class="bar"><i id="lbar"></i></div><div class="small" id="lmsg">loading…</div></div>
 <div id="menu" class="screen">
-  <h1>FNAFONE 3D</h1>
-  <button id="play">Play</button><button id="contactBtn">Contact</button>
-  <div class="small">Unity 프로젝트 FNAFONE3D(lejiyo09/FNAFONE3D)의 씬·메시·애니메이션·사운드·스크립트 규칙을 그대로 변환한 웹 이식판 (three.js).<br>
-  WASD 이동 · Shift 달리기 · 마우스 시점 · 좌클릭 상호작용(길게=줍기) · 우클릭 손전등 · 1/2 슬롯 · Q 버리기 · Esc 메뉴</div>
+  <div id="mpanel">
+    <h1>FNAFONE 3D</h1>
+    <button id="play">Play</button><button id="contactBtn">Contact</button><button id="exitBtn">Exit</button>
+    <div class="small2">Web port (three.js)</div>
+  </div>
+  <div class="small">WASD 이동 · Shift 달리기 · 마우스 시점 · 좌클릭 상호작용(길게=줍기) · 우클릭 손전등 · 1/2 슬롯 · Q 버리기 · Esc 메뉴<br>Unity 프로젝트 FNAFONE3D의 씬·메시·애니메이션·사운드·스크립트 규칙을 변환해 구동합니다.</div>
 </div>
 <div id="contact" class="screen">
   <h1>Contact</h1>
@@ -98,13 +104,13 @@
   <p>This page is a web port (Unity → HTML/three.js). The original work was modified.</p>
   <button id="contactClose">Close</button>
 </div>
-<div id="pause" class="screen"><h1>Paused</h1><button id="resume">Play</button><button id="pcontact">Contact</button><button id="pexit">Exit</button></div>
+<div id="pause" class="screen"><h1>Paused</h1><label class="small">Mouse sensitivity <input id="sens" type="range" min="0.5" max="6" step="0.1" value="2"></label><button id="resume">Play</button><button id="pcontact">Contact</button><button id="pexit">Exit</button></div>
 <div id="dead" class="screen"><h1>YOU DIED</h1><p class="small" id="deadby"></p><div class="small">메인 메뉴로 돌아갑니다…</div></div>
 <div id="win" class="screen"><h1>6 AM</h1><p class="small">You survived the night.</p></div>
 
 <script src="lib/three.min.js"></script><script src="lib/fflate.min.js"></script><script src="lib/NURBSUtils.js"></script><script src="lib/NURBSCurve.js"></script>
-<script src="lib/FBXLoader.js"></script><script src="lib/OBJLoader.js"></script><script src="lib/SkeletonUtils.js"></script>
+<script src="lib/FBXLoader.js"></script><script src="lib/OBJLoader.js"></script><script src="lib/SkeletonUtils.js"></script><script src="lib/BufferGeometryUtils.js"></script>
 <script src="js/world.js"></script><script src="js/phys.js"></script><script src="js/anim.js"></script><script src="js/audio.js"></script>
-<script src="js/game.js"></script>
+<script src="js/batch.js"></script><script src="js/game.js"></script>
 </body>
 </html>

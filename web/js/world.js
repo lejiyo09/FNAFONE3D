@@ -117,10 +117,16 @@ class World {
         const um = this.matByName.get(norm(fm.name));
         const made = um ? this.unityMaterial(um._path) : null;
         if (made) return made;
-        // fall back to FBX material, simplified to Lambert
-        const l = new T.MeshLambertMaterial({ color: fm.color ? fm.color.clone() : 0xcccccc, map: fm.map || null, side: T.DoubleSide, transparent: !!fm.transparent, opacity: fm.opacity });
-        if (fm.emissive && fm.emissive.getHex()) l.emissive = fm.emissive.clone();
-        if (fm.map) { fm.map.wrapS = fm.map.wrapT = T.RepeatWrapping; }
+        // fall back to FBX material, simplified to Lambert (shared by look so identical colours can be batched)
+        const key = [fm.color ? fm.color.getHexString() : 'cccccc', fm.map ? fm.map.uuid : '', fm.transparent ? 1 : 0, fm.opacity, fm.emissive ? fm.emissive.getHexString() : ''].join('|');
+        if (!this.fbxMatCache) this.fbxMatCache = new Map();
+        let l = this.fbxMatCache.get(key);
+        if (!l) {
+          l = new T.MeshLambertMaterial({ color: fm.color ? fm.color.clone() : 0xcccccc, map: fm.map || null, side: T.DoubleSide, transparent: !!fm.transparent, opacity: fm.opacity });
+          if (fm.emissive && fm.emissive.getHex()) l.emissive = fm.emissive.clone();
+          if (fm.map) { fm.map.wrapS = fm.map.wrapT = T.RepeatWrapping; }
+          this.fbxMatCache.set(key, l);
+        }
         return l;
       });
       o.material = Array.isArray(o.material) ? out : out[0];
