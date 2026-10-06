@@ -294,7 +294,7 @@ class Flashlight {
   constructor(o, f) { flashB = this; flashlightNode = o; this.max = f.batteryLifeSeconds || 40; this.life = this.max; this.isLightActive = !!f.isLightActive; this.lightSource = null; }
   start() { this.lightSource = fieldRef(this, 'lightSource'); }
   add(sec) { this.life = Math.min(this.max, this.life + sec); }
-  trigger() { this.isLightActive = !this.isLightActive; sfx('Assets/Sound Effects/Button Click.wav', { vol: 0.4 }); }
+  trigger() { this.isLightActive = !this.isLightActive; sfx('Assets/Sound Effects/Button Click.wav', { vol: 0.17 }); }
   update(dt) {
     if (S.dead) return;
     if (this.life > 0 && this.isLightActive) this.life -= dt; else this.isLightActive = false;
@@ -444,19 +444,35 @@ class FridgeOrOven {
 }
 REG.RefrigeratorDoor = FridgeOrOven; REG.OvenDoor = FridgeOrOven;
 
+// TextMeshPro 3D text -> canvas texture plane (the door countdown screens)
+function makeWorldText(o, text) {
+  if (!o) return null;
+  const cv = document.createElement('canvas'); cv.width = 128; cv.height = 64;
+  const ctx = cv.getContext('2d'), tex = new T.CanvasTexture(cv);
+  const mesh = new T.Mesh(new T.PlaneGeometry(0.9, 0.45), new T.MeshBasicMaterial({ map: tex, transparent: true, side: T.DoubleSide, depthWrite: false }));
+  mesh.scale.set(-1, 1, 1);   // our scene is mirrored
+  o.add(mesh);
+  const api = { last: null, set(t) {
+    if (t === api.last) return; api.last = t;
+    ctx.clearRect(0, 0, 128, 64); ctx.fillStyle = '#ff2a2a'; ctx.font = 'bold 44px PublicPixel, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(t, 64, 34); tex.needsUpdate = true; } };
+  api.set(text);
+  return api;
+}
 class DoorButton {
   constructor(o, f) { this.obj = o; this.f = f; this.isOn = !!f.isOn; this.max = f.doorClosedTimerSeconds || 20; this.t = this.max; }
-  start() { this.door = animFor(fieldRef(this, 'doorAnimator')) || findAnimatorByState(this.f.doorOpenAnim); this.sw = animFor(this.obj); this.light = fieldRef(this, 'switchLight'); if (this.isOn) playAnim(this.door, this.f.doorOpenAnim); }
+  start() { this.txt = makeWorldText(fieldRef(this, 'countdownText'), '60'); this.door = animFor(fieldRef(this, 'doorAnimator')) || findAnimatorByState(this.f.doorOpenAnim); this.sw = animFor(this.obj); this.light = fieldRef(this, 'switchLight'); if (this.isOn) playAnim(this.door, this.f.doorOpenAnim); }
   click() {
-    sfx('Assets/Sound Effects/Button Click.wav', { vol: 0.5 });
+    sfx('Assets/Sound Effects/Button Click.wav', { vol: 1 });
     if (this.t < this.max && !this.isOn) return;
     playAnim(this.sw, 'doorButton'); this.isOn = !this.isOn;
-    if (this.isOn) { sfx('Assets/Sound Effects/sdoor.wav', { vol: 0.5 }); playAnim(this.door, this.f.doorOpenAnim); } else playAnim(this.door, this.f.doorCloseAnim);
+    if (this.isOn) { sfx('Assets/Sound Effects/sdoor.wav', { vol: 1 }); playAnim(this.door, this.f.doorOpenAnim); } else playAnim(this.door, this.f.doorCloseAnim);
   }
   update(dt) {
     if (this.t < 0) { this.isOn = false; playAnim(this.door, this.f.doorCloseAnim); }
     if (this.isOn) { setLight(this.light, [0, 1, 0]); this.t -= dt; }
     else { setLight(this.light, [1, 0, 0]); this.t = Math.min(this.max, Math.max(0, this.t + dt)); }
+    if (this.txt) this.txt.set(String(Math.round(this.t)));
   }
 }
 REG.DoorButton = DoorButton;
@@ -465,7 +481,7 @@ class LightButton {
   constructor(o, f) { this.obj = o; this.f = f; this.isOn = false; this.t = 0; }
   start() { this.target = fieldRef(this, 'targetLight'); this.light = fieldRef(this, 'switchLight'); this.sw = animFor(this.obj); const d = this.target && this.target.userData.lightDesc; if (d) d.on = false; }
   click() {
-    sfx('Assets/Sound Effects/Button Click.wav', { vol: 0.5 });
+    sfx('Assets/Sound Effects/Button Click.wav', { vol: 0.18 });
     if (!this.isOn) { this.isOn = true; const d = this.target.userData.lightDesc; if (d) d.on = true; playAnim(this.sw, 'doorlight_on_off'); setLight(this.light, [0, 1, 0]); }
   }
   update(dt) {
@@ -545,7 +561,7 @@ class SecurityCameraTablet {
     });
   }
   switchTo(i) {
-    S.camIdx = i; sfx('Assets/Sound Effects/camera_change.mp3', { vol: 0.5 });
+    S.camIdx = i; sfx('Assets/Sound Effects/camera_change.mp3', { vol: 0.18 });
     [...$('cpanel').children].forEach((b, k) => b.classList.toggle('on', k === i));
     tvNoise();
   }
@@ -879,6 +895,7 @@ $('contactBtn').onclick = () => { $('contact').style.display = 'flex'; };
 $('contactClose').onclick = () => { $('contact').style.display = 'none'; };
 $('play').onclick = () => startGame();
 $('exitBtn').onclick = () => { try { window.close(); } catch (e) {} $('exitBtn').textContent = 'Close the tab to exit'; };
+const spatialVoices = [];
 let menuMusic = null;
 addEventListener('pointerdown', () => { if (S.mode === 'menu' && !menuMusic && audio) { audio.unlock(); menuMusic = true; sfx('Assets/Sound Effects/main_menu_music.mp3', { loop: true, vol: 0.5 }).then((h) => { menuMusic = h; }); } }, { once: false });
 
@@ -889,7 +906,11 @@ function startGame() {
   // bgnoises (EventSystem AudioSource, loop)
   const es = world.objs.find((o) => o.userData.node.c.audio && o.userData.node.c.audio.play && o.userData.node.c.audio.loop && o.userData.node.c.audio.clip);
   if (es) sfx(es.userData.node.c.audio.clip, { loop: true, vol: es.userData.node.c.audio.vol });
-  world.objs.filter((o) => o.userData.node.c.audio && o.userData.node.c.audio.play && !o.userData.node.c.audio.loop && o.userData.node.c.audio.on && o.userData.node.c.audio.clip && o !== es);
+  // positional looping sources (the carousel): volume falls from min to max distance
+  for (const o of world.objs) {
+    const a = o.userData.node.c.audio;
+    if (a && a.play && a.loop && a.on && a.clip && o !== es) sfx(a.clip, { loop: true, vol: 0 }).then((h) => { if (h.gain) spatialVoices.push({ h, o, a }); });
+  }
 }
 
 // ---------- camera ----------
@@ -918,6 +939,7 @@ function tick(dt) {
   for (const b of behs) if (b.update) b.update(dt);
   for (const a of animators) a.update(dt);
   updateBodies(dt);
+  for (const v of spatialVoices) { const d = uP(v.o).distanceTo(uP(player)); v.h.gain.gain.value = v.a.vol * Math.max(0, Math.min(1, (v.a.max - d) / Math.max(0.01, v.a.max - v.a.min))); }
   for (let i = jobs.length - 1; i >= 0; i--) { jobs[i].t -= dt; if (jobs[i].t <= 0) { const j = jobs.splice(i, 1)[0]; j.fn(); } }
   if (inventoryB) inventoryB.update();
   if (S.tablet) drawNoise();

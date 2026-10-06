@@ -453,6 +453,19 @@ def main(src, dst):
         if rt is None:
             vp = next((k for k, v in pdocs.items() if v['cls'] == 1001), None)
             b2.instantiate_prefab_instance(pdocs, vp, lambda f: -1, ov_outer=None, is_scene=False)
+            # components the variant adds to the instance's GameObjects (colliders, rigidbody, scripts...)
+            for fid, sv in pdocs.items():
+                if sv['cls'] == 1 and sv['stripped']:
+                    key = (sv['d']['m_PrefabInstance']['fileID'], sv['d']['m_CorrespondingSourceObject']['fileID'])
+                    if key in b2.src_map:
+                        b2.owner[fid] = b2.src_map[key]
+            COMP = {33, 23, 65, 64, 135, 136, 54, 108, 82, 95, 20, 114, 137}
+            for fid, cv in pdocs.items():
+                if cv['cls'] in COMP and not cv['stripped']:
+                    idx = b2.owner.get(cv['d'].get('m_GameObject', {}).get('fileID'))
+                    if idx is not None:
+                        b2.owner[fid] = idx
+                        b2._comp(idx, fid, cv, pdocs, {}, None)
         else:
             b2.build_go_tree_prefab(pdocs, rt['d']['m_GameObject']['fileID'], -1, {}, 'x')
         b2.finalize()
