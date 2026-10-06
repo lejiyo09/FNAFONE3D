@@ -3,5 +3,13 @@ services:
   - type: web
     name: fnafone3d-web
     runtime: static
+    branch: claude/gifted-ritchie-2oietx   # change to main after merging
     staticPublishPath: ./web
     buildCommand: "true"
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=604800
+      - path: /data/*
+        name: Cache-Control
+        value: public, max-age=3600
