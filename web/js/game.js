@@ -72,7 +72,7 @@ async function boot() {
   $('loading').style.display = 'none'; $('menu').style.display = 'flex';
   S.mode = 'menu';
   requestAnimationFrame(loop);
-  window.__game = { S, world, mouse, keys, uP, forwardOf, behOf, phys, behs, enemies, startGame, tick, PERF, get player() { return player; }, get nav() { return nav; }, get info() { return renderer.info; }, get flash() { return flashB; }, get inv() { return inventoryB; }, get clock() { return clockB; } };
+  window.__anims = anims; window.__game = { S, world, mouse, keys, uP, forwardOf, behOf, phys, behs, enemies, startGame, tick, PERF, get player() { return player; }, get nav() { return nav; }, get camera() { return camera; }, get info() { return renderer.info; }, get flash() { return flashB; }, get inv() { return inventoryB; }, get clock() { return clockB; } };
   window.__ready = true;
 }
 
@@ -89,7 +89,7 @@ function injectStyles() {
   $('recimg').src = spriteUrl('Assets/Sprites/rec.png');
   $('batEmpty').src = spriteUrl('Assets/Sprites/battery_empty.png');
   const bat = $('bat');
-  [32, 45, 57, 71].forEach((top) => { const e = document.createElement('i'); e.style.top = top + 'px'; bat.appendChild(e); });
+  [28, 44, 60, 76].forEach((top) => { const e = document.createElement('i'); e.style.top = top + 'px'; bat.appendChild(e); });
 }
 function uiScale() { const w = innerWidth, h = innerHeight; return Math.pow(w / 800, 0.505) * Math.pow(h / 600, 0.495); }
 function layoutUI() {
@@ -143,6 +143,7 @@ function setupObjects() {
     for (let p = c.obj; p; p = p.parent) if (p.userData.animator || p.userData.node && p.userData.node.c.mb && p.userData.node.c.mb.some((m) => m.script === 'EnemyAI' || m.script === 'PlayerController')) { c.dynamic = true; break; }
     if (c.tag === 'Enemy' || c.tag === 'Player') c.dynamic = true;
   }
+  setupHandClip();
   setupLights();
   setupLevelExtras();
   // static batching (draw-call reduction): everything not referenced/animated/tagged by the game's scripts
@@ -165,7 +166,7 @@ function addRestaurantColliders(rest, objs) {
   const tmpBox = new T.Box3(), sz = new T.Vector3(), ctr = new T.Vector3();
   let n = 0;
   rest.userData.fbx.traverse((o) => {
-    if (!o.isMesh) return;
+    if (!o.isMesh || o.userData.dupOfGO) return;
     const nm = alnum(o.name);
     if (SKIP.test(nm) || claimed.has(nm)) return;
     if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
@@ -181,6 +182,31 @@ function addRestaurantColliders(rest, objs) {
     phys.colliders.push(col); n++;
   });
   console.log('restaurant colliders', n);
+}
+
+// The first-person forearms come out far too long with the plain FBX conversion; cut them with a clip plane fixed to the screen.
+const handClip = { planes: [new T.Plane(), new T.Plane()], active: false };
+function setupHandClip() {
+  const h = world.objs.find((o) => o.name === 'hand (1)'); if (!h || !h.userData.fbx) return;
+  const seen = new Set();
+  h.userData.fbx.traverse((o) => { if (o.isSkinnedMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (!seen.has(m)) { seen.add(m); m.clippingPlanes = handClip.planes; m.clipShadows = false; m.needsUpdate = true; } }); });
+  renderer.localClippingEnabled = true; handClip.active = true;
+}
+const _hc = new T.Vector3(), _hn = new T.Vector3();
+function updateHandClip() {
+  if (!handClip.active) return;
+  camera.updateMatrixWorld(true);
+  const up = new T.Vector3(0, 1, 0).transformDirection(camera.matrixWorld);
+  const mk = (ndcX, keepLeft, plane) => {
+    _hc.set(ndcX, 0, 0.5).unproject(camera).sub(camera.position).normalize();
+    _hn.crossVectors(_hc, up).normalize();                       // points to the camera's left or right
+    const left = new T.Vector3(-1, 0, 0).transformDirection(camera.matrixWorld);
+    if (_hn.dot(left) < 0) _hn.negate();                          // now points left
+    if (!keepLeft) _hn.negate();
+    plane.setFromNormalAndCoplanarPoint(_hn, camera.position);
+  };
+  mk(1.2, true, handClip.planes[0]);      // keep what is left of x = +0.62 (screen)
+  mk(-1.2, false, handClip.planes[1]);     // keep what is right of x = -0.7
 }
 
 // ---------- lights ----------
@@ -299,8 +325,10 @@ class Flashlight {
     if (S.dead) return;
     if (this.life > 0 && this.isLightActive) this.life -= dt; else this.isLightActive = false;
     if (this.lightSource) this.lightSource.visible = this.isLightActive;
-    const parts = $('bat').querySelectorAll('i');
+    const parts = $('bat').querySelectorAll('i'), frac = this.life / this.max;
     for (let i = 0; i < 4; i++) parts[i].style.display = this.life > (i === 3 ? 0 : this.max / (i + 2)) ? 'block' : 'none';
+    const bat = $('bat'); bat.className = 'abs ' + (frac > 0.5 ? '' : frac > 0.25 ? 'mid' : this.life > 5 ? 'low' : 'crit');
+    $('bsec').textContent = Math.ceil(this.life) + 's';
   }
 }
 REG.Flashlight = Flashlight;
@@ -959,6 +987,7 @@ function loop(now) {
   if (S.jump && S.jump.camObj) { node = S.jump.camObj; }
   else if (S.tablet && tabletB && tabletB.cams[S.camIdx]) node = tabletB.cams[S.camIdx];
   if (node) { const c = node.userData.node.c.camera; camFromNode(node, c ? c.fov : 60); }
+  updateHandClip();
   updateLights();
   const t1 = performance.now();
   renderer.render(world.scene, camera);

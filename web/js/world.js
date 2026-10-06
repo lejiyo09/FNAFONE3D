@@ -178,6 +178,35 @@ class World {
     return idx;
   }
 
+  // Find the FBX mesh node a scene MeshFilter refers to. Unity mesh fileIDs are hashes of the mesh name (shared across files),
+  // so ids learned from GameObjects named like their mesh resolve the others (e.g. gift_cover_r uses mesh "Cube.001").
+  learnMeshIds(nodes) {
+    if (!this.meshIdName) this.meshIdName = new Map();
+    for (const n of nodes) {
+      const m = n.c.mesh; if (!m || !m.src || !m.id) continue;
+      const model = this.models.get(m.src); if (!model) continue;
+      const k = norm(n.n.replace(/\s*\(\d+\)$/, ''));
+      if (this.fbxNodeIndex(model).has(k)) this.meshIdName.set(m.id, k);
+    }
+  }
+  resolveMeshNode(model, idx, n, mesh) {
+    let r = idx.get(norm(n.n)) || idx.get(norm(n.n.replace(/\s*\(\d+\)$/, '')));
+    if (r) return r;
+    const byId = this.meshIdName && this.meshIdName.get(mesh.id);
+    if (byId && idx.get(byId)) return idx.get(byId);
+    if (idx.size === 1) return idx.values().next().value;       // single-mesh model
+    // last resort (restaurant parts): the FBX node whose scale equals the GO's scale (the GO keeps the node scale)
+    const s = n.s, close = (a, b) => Math.abs(a - b) <= 0.01 * Math.max(1, Math.abs(b));
+    const cands = [];
+    for (const o of idx.values()) {
+      const a = [o.scale.x, o.scale.y, o.scale.z].sort((x, y) => x - y), b = [s[0], s[1], s[2]].map(Math.abs).sort((x, y) => x - y);
+      if (a.every((v, i) => close(Math.abs(v), b[i]))) cands.push(o);
+    }
+    if (!cands.length && idx.size <= 3) return idx.values().next().value;   // small prop: first mesh
+    if (cands.length) { cands.forEach((o) => { o.userData.dupOfGO = true; o.visible = false; (this.hideNames = this.hideNames || new Set()).add(o.name); }); return cands[0]; }
+    return null;
+  }
+
   instantiateModel(src) {
     const model = this.models.get(src);
     if (!model) return null;
@@ -208,6 +237,7 @@ class World {
       const p = n.p >= 0 ? objsOut[base + n.p] : parentObj;
       p.add(objsOut[base + i]);
     }
+    this.learnMeshIds(nodes);
     // components (second pass: parents exist)
     for (let i = 0; i < nodes.length; i++) this.addComponents(objsOut[base + i], nodes[i], objsOut, base);
     // Skinned characters: use the FBX's own skeleton/skin (the YAML bone hierarchy and bind poses are not needed)
@@ -222,7 +252,7 @@ class World {
       if (!m) return;
       const wrap = new T.Object3D(); wrap.name = '__fbx'; wrap.scale.set(-0.01, 0.01, 0.01); wrap.add(m);
       objsOut[base + i].add(wrap); objsOut[base + i].userData.fbx = m; objsOut[base + i].userData.charSrc = src;
-      if (n.n.startsWith('hand')) { wrap.scale.multiplyScalar(0.25); if (n.n === 'hand') objsOut[base + i].visible = false; }   // empirical: both hands come from 'hand (1)'   // empirical: the first-person hands come out 4x too large with the plain conversion
+      if (n.n.startsWith('hand')) { wrap.scale.multiplyScalar(0.13); if (n.n === 'hand') objsOut[base + i].visible = false; else objsOut[base + i].position.add(new T.Vector3(G.HAND_DX || 0.086, G.HAND_DY || -0.2, G.HAND_DZ || 0.32)); }   // empirical: both hands come from 'hand (1)'   // empirical: the first-person hands come out 4x too large with the plain conversion
       // materials of the YAML SkinnedMeshRenderers (matched to the FBX meshes by name)
       const idx = new Map(); m.traverse((o) => { if (o.isMesh || o.isSkinnedMesh) idx.set(norm(o.name), o); });
       const walk = (k) => {
@@ -262,6 +292,11 @@ class World {
       poseWalk(i, []);
       m.updateMatrixWorld(true);
     });
+    // hide the FBX copies of parts the scene replaced (the restaurant instance may have been cloned before they were found)
+    if (this.hideNames) for (let i = 0; i < nodes.length; i++) {
+      const f = objsOut[base + i].userData.fbx;
+      if (f && nodes[i].c.fbx && nodes[i].c.fbx.endsWith('restaurant.fbx')) f.traverse((o) => { if (o.isMesh && this.hideNames.has(o.name)) { o.visible = false; o.userData.dupOfGO = true; } });
+    }
     return objsOut.slice(base);
   }
 
@@ -300,7 +335,15 @@ class World {
         if (model) {
           if (!model.userData._fixed) { this.fixFbxMaterials(model); if (c.mesh.src.endsWith('restaurant.fbx')) this.restaurantMaterials(model); model.userData._fixed = true; }
           const idx = this.fbxNodeIndex(model);
-          const src = idx.get(norm(n.n)) || idx.get(norm(n.n.replace(/\s*\(\d+\)$/, '')));
+          const src = this.resolveMeshNode(model, idx, n, c.mesh);
+          // the scene replaced some restaurant parts (doors) by animated GameObjects: hide the FBX's own static copies
+          const pn = n.p >= 0 ? objsOut[base + n.p].name : '';
+          if (src && c.mesh.src.endsWith('restaurant.fbx') && (/door/i.test(n.n) || /door|pivot/i.test(pn) || n.n === 'Cube.061')) {
+            const a = src.scale, cnt = src.geometry.attributes.position.count;
+            for (const o of idx.values()) {
+              if (o !== src && o.geometry.attributes.position.count === cnt && Math.abs(o.scale.x - a.x) < 0.01 * a.x && Math.abs(o.scale.y - a.y) < 0.01 * a.y + 0.001 && Math.abs(o.scale.z - a.z) < 0.01 * a.z + 0.001) { o.visible = false; o.userData.dupOfGO = true; (this.hideNames = this.hideNames || new Set()).add(o.name); }
+            }
+          }
           if (src) {
             const wrap = new T.Object3D();
             // the scene GO's own scale already carries the FBX node scale; only cm->m and the x mirror are left.
