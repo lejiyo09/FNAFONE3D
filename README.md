@@ -7,11 +7,26 @@
 
 
 # Web (HTML) version
-`web/` contains a browser port of the game rules from `Assets/Scripts` (clock, flashlight battery, doors, enemy chase/freeze/jumpscare, security-camera tablet), written with three.js. Models and level are generated in code, so the Unity scene/meshes are not used. *The original work was modified (Unity → HTML/three.js).*
+`web/` is a browser port of the game that runs **the project's own Unity data**: the `Game.unity` scene (hierarchy, prefabs, lights, colliders), the FBX/OBJ meshes, materials and textures, `.anim`/`.controller` animation data, the audio clips, the HUD sprites and fonts, and the rules of `Assets/Scripts/*.cs` (clock, flashlight, inventory, doors, buttons, tape player, gift boxes, enemy AI, jumpscares, security cameras). Rendering is three.js; no Unity runtime is involved. *The original work was modified (Unity → HTML/three.js).*
 
-Run locally: `cd web && python3 -m http.server` and open http://localhost:8000. Deploy on Render: **New → Blueprint** (uses `render.yaml`, static site from `./web`).
-Controls: WASD move · Shift run · mouse look · F flashlight · E door · Tab camera tablet (1–4).
-Enemy wake hours/speeds are not recoverable from the scene file, so they are set in `web/game.js` (`ENEMIES`).
+```sh
+# 1. data (needs the Git LFS files of this repo: `git lfs pull`)
+python3 tools/convert_scene.py Assets/Scenes/Game.unity web/data/game.json   # scene + prefabs -> JSON
+python3 tools/export_assets.py                                              # models, textures (<=1024px), audio (ogg), animations, materials
+# 2. run
+cd web && python3 -m http.server      # open http://localhost:8000
+```
+Deploy on Render with **New → Blueprint** (`render.yaml`, static site from `./web`). `web/viewer.html` is a small scene inspector (`?top=130&cut=9&only=restaurant`).
+
+Controls (from `ProjectSettings/InputManager.asset`): WASD move · Shift run · mouse look · left click interact (hold = pick up) · right click flashlight · 1/2 inventory slot · Q drop · Esc menu · Tab/1–8 camera tablet.
+
+What comes straight from the Unity project: scene transforms, enemy `walkSpeed`/`revivalHour`/`jumpscareDistance`, battery seconds, door-button timers, item/key data, door/appliance/gift-box animations, wake-up and jumpscare clips, UI layout (800×600 canvas scaling), sprites, sounds.
+
+Known deviations (things that could not be recovered from the YAML):
+- Prefab overrides on the restaurant FBX use hashed `fileID`s that cannot be resolved. Materials of the restaurant are therefore assigned by shape/name (`World.restaurantMaterials`), static colliders are fitted to the FBX meshes (`addRestaurantColliders`), and the three animated restaurant parts (two security doors, the fan) are linked by node name.
+- Navigation uses a grid built from the colliders instead of the baked `NavMesh.asset`; enemies open weak doors when close.
+- The first-person hands use an empirical scale/selection (`web/js/world.js`).
+- Lights use a pool of the nearest ~16 lights (HDRP photometric units are mapped by eye); static meshes are merged into batches.
 
 # About Third-Party Content
 ## 3D Assets

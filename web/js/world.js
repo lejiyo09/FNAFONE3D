@@ -185,6 +185,7 @@ class World {
     const hasSkin = (() => { let s = false; model.traverse((o) => { if (o.isSkinnedMesh) s = true; }); return s; })();
     const clone = hasSkin ? T.SkeletonUtils.clone(model) : model.clone(true);
     clone.userData.web = model.userData.web;
+    clone.traverse((o) => { if (o.isSkinnedMesh) o.frustumCulled = false; });   // bind-pose bounds are wrong once posed/animated
     clone.animations = model.animations;
     return clone;
   }
@@ -221,7 +222,7 @@ class World {
       if (!m) return;
       const wrap = new T.Object3D(); wrap.name = '__fbx'; wrap.scale.set(-0.01, 0.01, 0.01); wrap.add(m);
       objsOut[base + i].add(wrap); objsOut[base + i].userData.fbx = m; objsOut[base + i].userData.charSrc = src;
-      if (n.n.startsWith('hand')) wrap.scale.multiplyScalar(0.25);   // empirical: the first-person hands come out 4x too large with the plain conversion
+      if (n.n.startsWith('hand')) { wrap.scale.multiplyScalar(0.25); if (n.n === 'hand') objsOut[base + i].visible = false; }   // empirical: both hands come from 'hand (1)'   // empirical: the first-person hands come out 4x too large with the plain conversion
       // materials of the YAML SkinnedMeshRenderers (matched to the FBX meshes by name)
       const idx = new Map(); m.traverse((o) => { if (o.isMesh || o.isSkinnedMesh) idx.set(norm(o.name), o); });
       const walk = (k) => {
@@ -229,6 +230,8 @@ class World {
         if (nn.c.skinned && nn.c.mats) {
           const fm = idx.get(norm(nn.n));
           if (fm) {
+            fm.visible = !!nn.a;     // e.g. the hand prefab ships two meshes, only one active
+            if (n.n.startsWith('hand')) fm.visible = true;   // empirical (see below)
             const cur = Array.isArray(fm.material) ? fm.material : [fm.material];
             const out = cur.map((mm, j) => { const p = nn.c.mats[j]; return (p && this.unityMaterial(p)) || mm; });
             fm.material = Array.isArray(fm.material) ? out : out[0];
