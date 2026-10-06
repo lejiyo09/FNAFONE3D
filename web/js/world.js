@@ -307,7 +307,7 @@ class World {
             wrap.scale.set(-0.01, 0.01, 0.01);
             const mm = new T.Mesh(src.geometry, src.material);
             wrap.add(mm); mesh = wrap;
-          } else this.stats.missingMesh++;
+          } else { this.stats.missingMesh++; (this.missingList = this.missingList || []).push(n.n + ' <- ' + c.mesh.src.split('/').pop() + ' @' + o.userData.idx); }
         }
       }
       if (mesh) {
