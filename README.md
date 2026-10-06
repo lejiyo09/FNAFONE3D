@@ -5,6 +5,14 @@
 
 ![FNAFONE 3D Thumbnail](README_MD_MEDIA/fnafone3dthumbnail.png)
 
+
+# Web (HTML) version
+`web/` contains a browser port of the game rules from `Assets/Scripts` (clock, flashlight battery, doors, enemy chase/freeze/jumpscare, security-camera tablet), written with three.js. Models and level are generated in code, so the Unity scene/meshes are not used. *The original work was modified (Unity → HTML/three.js).*
+
+Run locally: `cd web && python3 -m http.server` and open http://localhost:8000. Deploy on Render: **New → Blueprint** (uses `render.yaml`, static site from `./web`).
+Controls: WASD move · Shift run · mouse look · F flashlight · E door · Tab camera tablet (1–4).
+Enemy wake hours/speeds are not recoverable from the scene file, so they are set in `web/game.js` (`ENEMIES`).
+
 # About Third-Party Content
 ## 3D Assets
 <p style="font-size: 13px; font-weight: normal; margin: 5px; color: #4A4A4A;"> <a href="https://sketchfab.com/3d-models/free-fps-hands-2111009606fa4a07b355413ffa3c74f9?utm_medium=embed&utm_campaign=share-popup&utm_content=2111009606fa4a07b355413ffa3c74f9" target="_blank" style="font-weight: bold; color: #1CAAD9;"> Free FPS-Hand's </a> by <a href="https://sketchfab.com/Askasknot?utm_medium=embed&utm_campaign=share-popup&utm_content=2111009606fa4a07b355413ffa3c74f9" target="_blank" style="font-weight: bold; color: #1CAAD9;"> Askasknot </a> on <a href="https://sketchfab.com?utm_medium=embed&utm_campaign=share-popup&utm_content=2111009606fa4a07b355413ffa3c74f9" target="_blank" style="font-weight: bold; color: #1CAAD9;">Sketchfab</a></p>

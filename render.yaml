@@ -1,0 +1,7 @@
+# Render Blueprint: New > Blueprint > pick this repo. Serves the browser port in ./web as a static site.
+services:
+  - type: web
+    name: fnafone3d-web
+    runtime: static
+    staticPublishPath: ./web
+    buildCommand: "true"
