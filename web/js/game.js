@@ -47,10 +47,9 @@ async function boot() {
   world = new World(data, assets, anims, matlib);
   const need = new Set(data.models);
   Object.values(data.prefabs || {}).forEach((p) => (p.models || []).forEach((m) => need.add(m)));
-  // character walk clips live in their own FBX files
-  for (const c of Object.values(anims.controllers)) for (const l of c.layers) for (const st of Object.values(l.states)) {
-    if (st.motion && st.motion.fbx) { const src = Object.keys(assets.map).find((k) => assets.map[k] === st.motion.fbx); if (src) need.add(src); }
-  }
+  // character walk clips: compact JSON extracted from the walk FBXs (tools/extract_clips.js)
+  world.walkClips = await J('walkclips');
+  need.delete('Assets/Characters/Player/hand.fbx');   // first-person hands are hidden
   lm.textContent = 'models…';
   await world.loadModels([...need], (d, n) => { lb.style.width = (100 * d / n * 0.8) + '%'; lm.textContent = 'models ' + d + '/' + n; });
   lm.textContent = 'building scene…'; lb.style.width = '85%';
@@ -60,7 +59,7 @@ async function boot() {
   audio = new AudioMgr(assets);
 
   renderer = new T.WebGLRenderer({ canvas: $('c'), antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  RES.max = Math.min(devicePixelRatio, 1.25); RES.pr = RES.max; renderer.setPixelRatio(RES.pr);
   camera = new T.PerspectiveCamera(60, 1, 0.1, 400);
   world.scene.background = new T.Color(0x040405);
   world.scene.fog = new T.FogExp2(0x040405, 0.006);
@@ -72,7 +71,7 @@ async function boot() {
   $('loading').style.display = 'none'; $('menu').style.display = 'flex';
   S.mode = 'menu';
   requestAnimationFrame(loop);
-  window.__anims = anims; window.__game = { S, world, mouse, keys, uP, forwardOf, behOf, phys, behs, enemies, startGame, tick, PERF, get player() { return player; }, get nav() { return nav; }, get camera() { return camera; }, get info() { return renderer.info; }, get flash() { return flashB; }, get inv() { return inventoryB; }, get clock() { return clockB; } };
+  window.__anims = anims; window.__game = { S, world, cull: () => { for (let i = 0; i < 8; i++) cullScene(); }, mouse, keys, uP, forwardOf, behOf, phys, behs, enemies, startGame, tick, PERF, get player() { return player; }, get nav() { return nav; }, get camera() { return camera; }, get info() { return renderer.info; }, get flash() { return flashB; }, get inv() { return inventoryB; }, get clock() { return clockB; } };
   window.__ready = true;
 }
 
@@ -216,8 +215,8 @@ function setupLights() {
   const scene = world.scene;
   scene.add(new T.AmbientLight(0x5a6580, 1.5));
   scene.add(new T.HemisphereLight(0x8090b0, 0x302418, 0.6));
-  for (let i = 0; i < 12; i++) { const l = new T.PointLight(0xffffff, 0, 10, 1.6); l.visible = false; scene.add(l); pool.points.push(l); }
-  for (let i = 0; i < 4; i++) { const l = new T.SpotLight(0xffffff, 0, 30, 0.6, 0.4, 1.4); l.visible = false; scene.add(l); scene.add(l.target); pool.spots.push(l); }
+  for (let i = 0; i < 8; i++) { const l = new T.PointLight(0xffffff, 0, 10, 1.6); l.visible = false; scene.add(l); pool.points.push(l); }
+  for (let i = 0; i < 2; i++) { const l = new T.SpotLight(0xffffff, 0, 30, 0.6, 0.4, 1.4); l.visible = false; scene.add(l); scene.add(l.target); pool.spots.push(l); }
   flashSpot = new T.SpotLight(0xfff0cc, 6, 120, 0.42, 0.45, 1.0);
   scene.add(flashSpot); scene.add(flashSpot.target);
   for (const d of world.lights) {
@@ -783,11 +782,9 @@ class CharAnim {
     // walking clip from the character's walk FBX
     const m = obj.userData.fbx, wfbx = st[name + '_walking'] && st[name + '_walking'].motion && st[name + '_walking'].motion.fbx;
     this.mixer = null;
-    if (m && wfbx) {
-      const srcKey = Object.keys(assets.map).find((k) => assets.map[k] === wfbx), src = world.models.get(srcKey);
-      if (src && src.animations && src.animations.length) {
-        this.mixer = new T.AnimationMixer(m); this.walkAction = this.mixer.clipAction(src.animations[0]); this.walkAction.loop = T.LoopRepeat;
-      }
+    const wj = wfbx && world.walkClips && world.walkClips[wfbx];
+    if (m && wj) {
+      this.mixer = new T.AnimationMixer(m); this.walkAction = this.mixer.clipAction(T.AnimationClip.parse(wj)); this.walkAction.loop = T.LoopRepeat;
     }
   }
   setAlive(v) { if (v && this.state === 'idle') { this.state = 'wakeup'; this.t = 0; } }
@@ -973,9 +970,51 @@ function tick(dt) {
   if (S.tablet) drawNoise();
   world.mirror.updateMatrixWorld(true);
   if (phys) for (const c of phys.colliders) if (c.dynamic) c.refresh();
-  if (S.navReady && (S.t * 2 | 0) !== S.navT) { S.navT = S.t * 2 | 0; nav.rebuild(); }
+  if (S.navReady && (S.t * 2 | 0) !== S.navT) {
+    S.navT = S.t * 2 | 0;
+    let sig = 0; for (const c of phys.colliders) if (c.dynamic && c.tag !== 'Enemy' && c.tag !== 'Player') sig += c.min.y + c.max.y * 1.7 + c.min.x * 0.3 + (c.enabled ? 1 : 0) + (phys.isVisible(c) ? 5 : 0);
+    if (Math.abs(sig - (S.navSig || 0)) > 1e-3) { S.navSig = sig; nav.rebuild(); }
+  }
 }
 const PERF = { upd: 0, ren: 0, n: 0 };
+// ---- performance: frustum/distance culling of skinned characters and small item groups, adaptive resolution ----
+const _fr = new T.Frustum(), _pm = new T.Matrix4(), _sp = new T.Sphere();
+let cullFrame = 0, cullItemsList = null;
+function setLayer(o, layer) { o.traverse((c) => { if (c.isMesh || c.isSkinnedMesh) c.layers.set(layer); }); }
+function cullScene() {
+  cullFrame++;
+  _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _fr.setFromProjectionMatrix(_pm);
+  // skinned characters are never frustum-culled by three (bind-pose bounds), so do it per character
+  for (const e of enemies) {
+    const f = e.obj.userData.fbx; if (!f) continue;
+    _sp.center.setFromMatrixPosition(e.obj.matrixWorld); _sp.center.y += 4; _sp.radius = 9;
+    const inView = _fr.intersectsSphere(_sp) && _sp.center.distanceTo(camera.position) < 160;
+    if (f.userData.culled === inView || f.userData.culled === undefined) { f.userData.culled = !inView; f.traverse((c) => { if (c.isSkinnedMesh) c.layers.set(inView ? 0 : 1); }); }
+  }
+  // small dynamic items (hats, boxes, batteries...): hide the far ones every few frames
+  if (cullFrame % 8 === 0) {
+    if (!cullItemsList) {
+      cullItemsList = [];
+      const groups = /^(Party Hats|Giftboxes|Plastic Plates.*|Plastic Forks|Tapes|pickableBattery|Wall Pizzas|Party Balloons.*|Hanging Ornaments|corridor_ornaments_l)$/;
+      for (const o of world.mirror.children) if (groups.test(o.name)) for (const ch of o.children) cullItemsList.push({ o: ch, far: false });
+      for (const b of behs) if (b.obj && /^(Pizza|PartyHat|Tape|Drink|PlasticPlate|PlasticFork|DoorKey|PickableBattery|GiftBox)$/.test(b.script) && !cullItemsList.some((c) => c.o === b.obj || c.o.getObjectById(b.obj.id))) cullItemsList.push({ o: b.obj, far: false });
+    }
+    for (const it of cullItemsList) {
+      const near = uP(it.o).distanceTo(player ? uP(player) : camera.position) < 70;
+      if (it.far === near) { it.far = !near; setLayer(it.o, near ? 0 : 1); }
+    }
+  }
+}
+// adaptive resolution: keep ~40 fps on weak GPUs (Chromebooks) by lowering the render scale
+const RES = { pr: 1, min: 0.5, max: 1, acc: 0, n: 0 };
+function adaptRes(dtMs) {
+  RES.acc += dtMs; RES.n++;
+  if (RES.n < 45) return;
+  const avg = RES.acc / RES.n; RES.acc = 0; RES.n = 0;
+  let pr = RES.pr;
+  if (avg > 28) pr = Math.max(RES.min, pr - 0.15); else if (avg < 17) pr = Math.min(RES.max, pr + 0.05);
+  if (pr !== RES.pr) { RES.pr = pr; renderer.setPixelRatio(pr); onResize(); }
+}
 function loop(now) {
   requestAnimationFrame(loop);
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
@@ -989,10 +1028,12 @@ function loop(now) {
   if (node) { const c = node.userData.node.c.camera; camFromNode(node, c ? c.fov : 60); }
   updateHandClip();
   updateLights();
+  cullScene();
   const t1 = performance.now();
   renderer.render(world.scene, camera);
   const t2 = performance.now();
   PERF.upd += t1 - t0; PERF.ren += t2 - t1; PERF.n++;
+  if (S.mode === 'play' && !S.paused) adaptRes(now - (loop.prev || now)); loop.prev = now;
 }
 
 boot().catch((e) => { console.error(e); $('lmsg').textContent = 'error: ' + e.message; });
