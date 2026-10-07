@@ -62,7 +62,7 @@ async function boot() {
   RES.max = Math.min(devicePixelRatio, 1.25); RES.pr = RES.max; renderer.setPixelRatio(RES.pr);
   camera = new T.PerspectiveCamera(60, 1, 0.1, 400);
   world.scene.background = new T.Color(0x040405);
-  world.scene.fog = new T.FogExp2(0x040405, 0.006);
+  world.scene.fog = new T.FogExp2(0x030304, 0.011);
   addEventListener('resize', onResize); onResize();
 
   injectStyles();
@@ -213,8 +213,8 @@ const pool = { points: [], spots: [], items: [], frame: 0 };
 let flashSpot = null;
 function setupLights() {
   const scene = world.scene;
-  scene.add(new T.AmbientLight(0x5a6580, 1.5));
-  scene.add(new T.HemisphereLight(0x8090b0, 0x302418, 0.6));
+  scene.add(new T.AmbientLight(0x4a5470, 0.8));
+  scene.add(new T.HemisphereLight(0x6070a0, 0x201810, 0.3));
   for (let i = 0; i < 8; i++) { const l = new T.PointLight(0xffffff, 0, 10, 1.6); l.visible = false; scene.add(l); pool.points.push(l); }
   for (let i = 0; i < 2; i++) { const l = new T.SpotLight(0xffffff, 0, 30, 0.6, 0.4, 1.4); l.visible = false; scene.add(l); scene.add(l.target); pool.spots.push(l); }
   flashSpot = new T.SpotLight(0xfff0cc, 6, 120, 0.42, 0.45, 1.0);
