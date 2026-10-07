@@ -141,7 +141,7 @@ class World {
     const byName = (n) => { for (const [p, m] of Object.entries(this.matlib)) if ((m.name || baseName(p)) === n) return this.unityMaterial(p); return null; };
     const floor = byName('ceramicfloor_1'), roof = byName('restaurant_roof'), wall = byName('wall_texture'), poster = byName('posters'),
           tfloor = byName('toilet_floor'), twall = byName('toilet_wall'), col = byName('restaurant_column'), door = byName('office01door'),
-          web = byName('cobweb'), star = byName('hangingstar'), kitchen = byName('kitchen_airway'), grey = byName('grey_metalic');
+          web = byName('cobweb'), cardboard = byName('cardboard'), star = byName('hangingstar'), kitchen = byName('kitchen_airway'), grey = byName('grey_metalic');
     root.updateMatrixWorld(true);
     const bb = new T.Box3(), sz = new T.Vector3(), ct = new T.Vector3();
     let n = 0;
@@ -158,6 +158,7 @@ class World {
       else if (flat && ct.y < 2) m = floor;
       else if (flat && ct.y > 12) m = roof;
       else if (tallWall) m = wall;
+      else if (cardboard && /^cube\d*$/.test(nm) && !o.material.map && o.material.color && o.material.color.getHex() === 0xcccccc && Math.max(sz.x, sz.y, sz.z) <= 2.1 && Math.min(sz.x, sz.y, sz.z) >= 0.4) m = cardboard;   // loose storage boxes
       else if (/^(cylinder|cube)\d*$/.test(nm) && sz.y > 8 && Math.max(sz.x, sz.z) < 3) m = col;
       if (m) { o.material = Array.isArray(o.material) ? o.material.map(() => m) : m; n++; }
     });
@@ -300,6 +301,25 @@ class World {
     return objsOut.slice(base);
   }
 
+  // Prefab-instance material overrides of a small FBX prop: group the slots per renderer (hashed fileID) and give the
+  // slots to the one mesh whose material count matches (unique match only; hashed ids can't be resolved to nodes).
+  applyFbxMats(model, list) {
+    const groups = new Map();
+    for (const [fid, prop, path] of list) {
+      const k = /\[(\d+)\]/.exec(prop); if (!k) continue;
+      if (!groups.has(fid)) groups.set(fid, []);
+      groups.get(fid)[+k[1]] = path;
+    }
+    const meshes = []; model.traverse((o) => { if (o.isMesh && !o.isSkinnedMesh) meshes.push(o); });
+    const taken = new Set();
+    for (const slots of groups.values()) {
+      const cand = meshes.filter((o) => Array.isArray(o.material) && o.material.length === slots.length && !taken.has(o));
+      if (cand.length !== 1) continue;
+      taken.add(cand[0]);
+      cand[0].material = slots.map((p, i) => (p ? this.unityMaterial(p) : cand[0].material[i]) || cand[0].material[i]);
+    }
+  }
+
   addComponents(o, n, objsOut, base) {
     const c = n.c;
     if (c.fbx) {
@@ -323,6 +343,7 @@ class World {
           // container root: overrides apply to the container, FBX nodes untouched
         }
         o.userData.fbx = m;
+        if (c.fbxmats && !c.fbx.endsWith('restaurant.fbx')) this.applyFbxMats(m, c.fbxmats);
         this.stats.meshes++;
       }
     }
