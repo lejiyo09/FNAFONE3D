@@ -51,7 +51,10 @@ class ClipPlayer {
     this.tracks = [];
     const loose = mode !== 'scene';
     const inFbx = (o) => { for (let p = o; p; p = p.parent) if (p.name === '__fbx') return true; return false; };
+    // constant root tracks only restate the pose the clip was authored at (it would teleport a prefab instance): skip them
+    const constant = (e) => e.keys.every((k) => k.every((v, i) => i === 0 || Math.abs(v - e.keys[0][i]) < 1e-6));
     const add = (kind, list, n) => list.forEach((e) => {
+      if (!e.path && constant(e) && root.userData.node) return;
       const o = resolvePath(root, e.path, loose);
       if (o) this.tracks.push({ kind, o, keys: e.keys, n, fbx: mode === 'fbx' || (mode === 'auto' && inFbx(o)) });
     });
