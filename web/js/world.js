@@ -271,6 +271,8 @@ class World {
         (kids.get(k) || []).forEach(walk);
       };
       walk(i);
+      // three r128 only skins with materials flagged for it (our replacement materials are plain Lambert)
+      m.traverse((o) => { if (o.isSkinnedMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((mm) => { if (!mm.skinning) { mm.skinning = true; mm.needsUpdate = true; } }); });
       // pose: the scene's own bone transforms (YAML hierarchy) define the rest pose Unity renders
       const findLoose = (root, names) => { let cur = root; for (const nm of names) { let nx = null; const want = norm(nm); for (const c of cur.children) if (norm(c.name) === want) { nx = c; break; } if (!nx) { cur.traverse((o) => { if (!nx && o !== cur && norm(o.name) === want) nx = o; }); } if (!nx) return null; cur = nx; } return cur; };
       const poseWalk = (k, names) => {

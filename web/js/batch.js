@@ -2,7 +2,7 @@
 (function (G) {
 'use strict';
 const T = THREE;
-const CELL = 48;
+const CELL = 24;
 
 function bake(item) {
   const mesh = item.mesh, g = mesh.geometry, grp = item.group;

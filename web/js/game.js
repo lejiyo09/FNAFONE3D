@@ -981,6 +981,7 @@ const PERF = { upd: 0, ren: 0, n: 0 };
 const _fr = new T.Frustum(), _pm = new T.Matrix4(), _sp = new T.Sphere();
 let cullFrame = 0, cullItemsList = null;
 function setLayer(o, layer) { o.traverse((c) => { if (c.isMesh || c.isSkinnedMesh) c.layers.set(layer); }); }
+let batchSpheres = null;
 function cullScene() {
   cullFrame++;
   _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _fr.setFromProjectionMatrix(_pm);
@@ -990,6 +991,14 @@ function cullScene() {
     _sp.center.setFromMatrixPosition(e.obj.matrixWorld); _sp.center.y += 4; _sp.radius = 9;
     const inView = _fr.intersectsSphere(_sp) && _sp.center.distanceTo(camera.position) < 160;
     if (f.userData.culled === inView || f.userData.culled === undefined) { f.userData.culled = !inView; f.traverse((c) => { if (c.isSkinnedMesh) c.layers.set(inView ? 0 : 1); }); }
+  }
+  // static batches (merged world geometry): drop the ones that are far away (the heavy decor 100+ m off is hardly visible)
+  if (cullFrame % 4 === 0) {
+    if (!batchSpheres) {
+      batchSpheres = [];
+      world.scene.traverse((o) => { if (o.name === '__batch') { o.geometry.computeBoundingSphere(); batchSpheres.push({ o, s: o.geometry.boundingSphere.clone().applyMatrix4(o.matrixWorld) }); } });
+    }
+    for (const b of batchSpheres) { const far = b.s.center.distanceTo(camera.position) - b.s.radius > 105; if (b.o.visible === far) b.o.visible = !far; }
   }
   // small dynamic items (hats, boxes, batteries...): hide the far ones every few frames
   if (cullFrame % 8 === 0) {
