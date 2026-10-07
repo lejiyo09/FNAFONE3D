@@ -787,7 +787,19 @@ class CharAnim {
       this.mixer = new T.AnimationMixer(m); this.walkAction = this.mixer.clipAction(T.AnimationClip.parse(wj)); this.walkAction.loop = T.LoopRepeat;
     }
   }
-  setAlive(v) { if (v && this.state === 'idle') { this.state = 'wakeup'; this.t = 0; } }
+  setAlive(v) {
+    if (v && this.state === 'idle') { this.state = 'wakeup'; this.t = 0; if (this.name === 'freddy') this.takeMic(); }
+  }
+  // Freddy picks his microphone up with him instead of leaving it hanging in the air where his hand was
+  takeMic() {
+    const m = this.obj.userData.fbx; if (!m) return;
+    const bones = []; m.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.bones.forEach((b) => { if (/^bip_hand_[lr]$/i.test(b.name) && !bones.includes(b)) bones.push(b); }); });
+    world.objs.filter((o) => /^fnaf_freddy_microphone/.test(o.name) && o.parent).forEach((mic) => {
+      mic.updateMatrixWorld(true); const p = new T.Vector3().setFromMatrixPosition(mic.matrixWorld);
+      let best = null, bd = 1e9; bones.forEach((b) => { const d = new T.Vector3().setFromMatrixPosition(b.matrixWorld).distanceTo(p); if (d < bd) { bd = d; best = b; } });
+      if (best) best.attach(mic);
+    });
+  }
   play(n) { this.state = n; this.t = 0; this.isWalking = false; if (this.walkAction) this.walkAction.stop(); }
   speed(v) { this.speedV = v; if (this.mixer) this.mixer.timeScale = v; }
   update(dt) {
