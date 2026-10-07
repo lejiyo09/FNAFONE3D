@@ -88,7 +88,7 @@ function injectStyles() {
   $('recimg').src = spriteUrl('Assets/Sprites/rec.png');
   $('batEmpty').src = spriteUrl('Assets/Sprites/battery_empty.png');
   const bat = $('bat');
-  [28, 44, 60, 76].forEach((top) => { const e = document.createElement('i'); e.style.top = top + 'px'; bat.appendChild(e); });
+  for (let k = 0; k < 4; k++) bat.appendChild(document.createElement('i'));
 }
 function uiScale() { const w = innerWidth, h = innerHeight; return Math.pow(w / 800, 0.505) * Math.pow(h / 600, 0.495); }
 function layoutUI() {
