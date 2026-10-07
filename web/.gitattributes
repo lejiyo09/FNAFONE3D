@@ -1,0 +1,8 @@
+# The web build ships plain files (not LFS pointers) so GitHub Pages / Render can serve them directly.
+* -filter -diff -merge
+*.png binary
+*.jpg binary
+*.ogg binary
+*.fbx binary
+*.obj -text
+*.ttf binary
